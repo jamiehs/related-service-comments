@@ -13,6 +13,9 @@ if( !defined( 'RELATED_SERVICE_COMMENTS_VERSION' ) ) define( 'RELATED_SERVICE_CO
 // The cache prefix
 if( !defined( 'RELATED_SERVICE_COMMENTS_CACHE_PREFIX' ) ) define( 'RELATED_SERVICE_COMMENTS_CACHE_PREFIX', 'rsc' );
 
+// The custom cron prefix
+if( !defined( 'RELATED_SERVICE_COMMENTS_CRON_PREFIX' ) ) define( 'RELATED_SERVICE_COMMENTS_CRON_PREFIX', 'rsc_cron' );
+
 // The 500px Key
 if( !defined( 'RELATED_SERVICE_COMMENTS_500PX_KEY' ) ) define( 'RELATED_SERVICE_COMMENTS_500PX_KEY', 'iPgKbqCRAOPYogfQrcNMzufvOLxzxa11PjTH38JE' );
 

@@ -32,6 +32,7 @@ class RelatedServiceComments {
     var $namespace = "related_service_comments";
     var $version = "1.0.0";
 	var $process_log = '';
+	var $update_existing_comment_content = false;
 	
     /**
      * Instantiation construction
@@ -41,6 +42,10 @@ class RelatedServiceComments {
      * @uses RelatedServiceComments::wp_register_styles()
      */
     function __construct() {
+    	// Set the admin email address...
+		$this->admin_email_address = get_option('admin_email');
+		$this->admin_name = get_option('blogname') . ' ' . __( 'Administrator', $this->namespace );
+		
         // Name of the option_value to store plugin options in
         $this->option_name = '_' . $this->namespace . '--options';
 
@@ -49,16 +54,44 @@ class RelatedServiceComments {
 		
 		// Update frequencies
 	    $this->update_schedules = array(
-			false => __('Never (Manual updates)', $this->namespace ),
-			3600 => __('Every hour', $this->namespace ),
-			7200 => sprintf( __('Every %d hours', $this->namespace ), 2 ),
-			14400 => sprintf( __('Every %d hours', $this->namespace ), 4 ),
-			21600 => sprintf( __('Every %d hours', $this->namespace ), 6 ),
-			43200 => sprintf( __('Every %d hours', $this->namespace ), 12 ),
-			86400 => __('Once a day', $this->namespace ),
-			172800 => sprintf( __('Every %d days', $this->namespace ), 2 ),
-			604800 => __('Once a week', $this->namespace ),
-			1209600 => sprintf( __('Once every %d weeks', $this->namespace ), 2 )
+			false => array(
+				'time' => 0, 
+				'name' => __('Never (Manual updates)', $this->namespace )
+			),
+			'hourly' => array(
+				'time' => 3600, 
+				'name' => __('Every hour', $this->namespace )
+			),
+			'every_2_hours' => array(
+				'time' => 7200, 
+				'name' => sprintf( __('Every %d hours', $this->namespace ), 2 )
+			),
+			'every_4_hours' => array(
+				'time' => 14400, 
+				'name' => sprintf( __('Every %d hours', $this->namespace ), 4 )
+			),
+			'every_6_hours' => array(
+				'time' => 21600, 
+				'name' => sprintf( __('Every %d hours', $this->namespace ), 6 )
+			),
+			'every_12_hours' => array(
+				'time' => 43200, 
+				'name' => sprintf( __('Every %d hours', $this->namespace ), 12 )
+			),
+			'daily' => array(
+				'time' => 86400, 
+				'name' => __('Once a day', $this->namespace ) ),
+			'every_2_days' => array(
+				'time' => 172800, 
+				'name' => sprintf( __('Every %d days', $this->namespace ), 2 )
+			),
+			'every_week' => array(
+				'time' => 604800, 
+				'name' => __('Once a week', $this->namespace ) ),
+			'every_2_weeks' => array(
+				'time' => 1209600, 
+				'name' => sprintf( __('Once every %d weeks', $this->namespace ), 2 )
+			)
 		);
 		
 		// Set and Translate defaults
@@ -68,7 +101,7 @@ class RelatedServiceComments {
 			'youtube_comment_prefix' => __('From YouTube: ', $this->namespace ),
 			'fivehundred_pixels_comment_prefix' => __('From 500px: ', $this->namespace ),
 			'dribbble_comment_prefix' => __('From Dribbble: ', $this->namespace ),
-			'update_schedule' => 86400
+			'update_schedule' => 'daily'
 		);
 		
 		/**
@@ -79,6 +112,9 @@ class RelatedServiceComments {
 		 * It is also set to a minimum of 180 seconds
 		 */
 		$this->cache_duration = max( 180, round( $this->get_option( 'update_schedule' ) / 2 ) );
+		
+		// Should we update the existing comment content?
+		$this->update_existing_comment_content = (boolean) ( $this->get_option( 'update_existing_comment_content' ) == 'yes' );
 		
         // Load all library files used by this plugin
         $libs = glob( RELATED_SERVICE_COMMENTS_DIRNAME . '/lib/*.php' );
@@ -96,30 +132,36 @@ class RelatedServiceComments {
      * Place all add_action, add_filter, add_shortcode hook-ins here
      */
     private function _add_hooks() {
-        // Options page for configuration
-        add_action( 'admin_menu', array( &$this, 'admin_menu' ) );
+		// Options page for configuration
+		add_action( 'admin_menu', array( &$this, 'admin_menu' ) );
+		
+		// Output the styles for the admin area.
 		add_action( 'admin_menu', array( &$this, 'admin_print_styles' ) );
 		
-        // Route requests for form processing
-        add_action( 'init', array( &$this, 'route' ) );
+		// Route requests for form processing
+		add_action( 'init', array( &$this, 'route' ) );
 		
 		// Add the meta boxes
 		add_action( 'add_meta_boxes', array( &$this, 'add_autodetect_meta_box' ) );
-        
-        // Add a settings link next to the "Deactivate" link on the plugin listing page
-        add_filter( 'plugin_action_links', array( &$this, 'plugin_action_links' ), 10, 2 );
+		
+		// Add a settings link next to the "Deactivate" link on the plugin listing page.
+		add_filter( 'plugin_action_links', array( &$this, 'plugin_action_links' ), 10, 2 );
 		
 		// Add Avatar Filter
 		add_filter( 'get_avatar', array( $this, 'filter_avatar' ), 20, 5 );
 		
-        add_action( "wp_ajax_{$this->namespace}_fetch_content_preview", array( &$this, "ajax_fetch_content_preview" ) );
+		// Fetch a preview of the content found that we can get related comments for.
+		add_action( "wp_ajax_{$this->namespace}_fetch_content_preview", array( &$this, "ajax_fetch_content_preview" ) );
 		
-        // Register all JavaScripts for this plugin
-        add_action( 'init', array( &$this, 'wp_register_scripts' ), 1 );
-        // Register all Stylesheets for this plugin
-        add_action( 'init', array( &$this, 'wp_register_styles' ), 1 );
+		// Register all JavaScripts for this plugin
+		add_action( 'init', array( &$this, 'wp_register_scripts' ), 1 );
 		
-    }
+		// Register all Stylesheets for this plugin
+		add_action( 'init', array( &$this, 'wp_register_styles' ), 1 );
+		
+		// Filter the default array of cron schedules and add some more...
+		add_filter( 'cron_schedules', array( &$this, 'cron_add_custom_schedules' ) );
+	}
     
     /**
      * Process update page form submissions
@@ -144,7 +186,14 @@ class RelatedServiceComments {
             /**
              * Place your options processing and storage code here
              */
-            
+             
+            // Because these are checkboxes, not set is actually 'no' 
+            if( !isset( $data['email_report_to_admin'] ) )
+				$data['email_report_to_admin'] = 'no';
+
+            if( !isset( $data['update_existing_comment_content'] ) )
+				$data['update_existing_comment_content'] = 'no';
+
             // Update the options value with the data submitted
             update_option( $this->option_name, $data );
             
@@ -431,6 +480,31 @@ class RelatedServiceComments {
 		return $comment_prefix;
 	}
 	
+	/**
+	 * Append some custom (namespaced) cron schedules to
+	 * the default list of 3 or so.
+	 * This loops through our list of custom 
+	 * cron intervals and adds each one.
+	 * 
+	 * @uses $this->update_schedules
+	 * @uses RELATED_SERVICE_COMMENTS_CRON_PREFIX
+	 * 
+	 * @param array $schedules
+	 * 
+	 * @return array $schedules
+	 */
+	function cron_add_custom_schedules( $schedules ) {
+		foreach( (array) $this->update_schedules as $slug => $time_name ){
+			if( $slug != false ) {
+				$schedules[ RELATED_SERVICE_COMMENTS_CRON_PREFIX . '_' . $slug ] = array(
+					'interval' => $time_name['time'],
+					'display' => $time_name['name']
+				);
+			}
+		}
+		return $schedules;
+	}
+	
     /**
      * Hook into register_deactivation_hook action
      * 
@@ -526,7 +600,14 @@ class RelatedServiceComments {
 		
 		return $deleted_rows;
 	}
-    
+	
+	
+	function email_admin( $subject, $message, $html = true ) {
+		add_filter( 'wp_mail_content_type', create_function( '' , 'return "text/html";' ) );
+		$headers = 'From: ' . get_option('blogname') . ' <server@' . $_SERVER['HTTP_HOST'] . '>' . "\r\n";
+		return wp_mail( $this->admin_name . ' <' . $this->admin_email_address . '>', $subject, $message, $headers );
+	}
+
 	function ajax_fetch_content_preview() {
 		// Verify the nonce!
         if( !wp_verify_nonce( $_REQUEST['fetch_content_preview_nonce'], "{$this->namespace}_fetch_content_preview" ) )
@@ -1542,32 +1623,34 @@ class RelatedServiceComments {
 						 * it instead. (by passing the found ID)
 						 */
 						if( $existing ){
-							// Update the existing comment...
-							$comment_data['comment_ID'] = $existing;
-							
-							/**
-							 * Note:
-							 * As of 3.4.1, One of the attributes that doesn't get 
-							 * overriden is the comment_parent column.
-							 * If the option is added in the future, these lines should
-							 * prevent the comment_parent from being overwritten.
-							 */ 
-							$comment_data['comment_parent'] = null;
-							unset( $comment_data['comment_parent'] );
-							// tldr; Right now they do nothing...
-							
-							// Update the comment... and log it
-							wp_update_comment( $comment_data );
-
-							/**
-							 * Add a bit of comment meta for the user's avatar, but
-							 * only if the avatar field is not empty.
-							 */
-							if( isset( $comment['author_avatar'] ) && !empty( $comment['author_avatar'] ) )
-								update_comment_meta( $existing, $this->namespace . '_avatar', $comment['author_avatar'] );
-							
-							$comments_updated++;
+							// Only update the comment if the user wishes...
+							if( $this->update_existing_comment_content ) {
+								// Update the existing comment...
+								$comment_data['comment_ID'] = $existing;
 								
+								/**
+								 * Note:
+								 * As of 3.4.1, One of the attributes that doesn't get 
+								 * overriden is the comment_parent column.
+								 * If the option is added in the future, these lines should
+								 * prevent the comment_parent from being overwritten.
+								 */ 
+								$comment_data['comment_parent'] = null;
+								unset( $comment_data['comment_parent'] );
+								// tldr; Right now they do nothing...
+								
+								// Update the comment... and log it
+								wp_update_comment( $comment_data );
+	
+								/**
+								 * Add a bit of comment meta for the user's avatar, but
+								 * only if the avatar field is not empty.
+								 */
+								if( isset( $comment['author_avatar'] ) && !empty( $comment['author_avatar'] ) )
+									update_comment_meta( $existing, $this->namespace . '_avatar', $comment['author_avatar'] );
+								
+								$comments_updated++;
+							}
 						}else{
 							// Insert a new comment...
 							$inserted_id = wp_insert_comment( $comment_data );
@@ -1652,9 +1735,21 @@ class RelatedServiceComments {
 		}
 
 		// Log the insertion of the comments...
-		$this->log_entry( sprintf( _n( '%d comment was added.', '%d comments were added.', $comments_added, $this->namespace ), $comments_added ) );
-		$this->log_entry( sprintf( _n( '%d comment was updated.', '%d comments were updated.', $comments_updated, $this->namespace ), $comments_updated ) );
-
+		$this->log_entry( sprintf( _n( '%d new comment was added.', '%d new comments were added.', $comments_added, $this->namespace ), $comments_added ) );
+		$this->log_entry( sprintf( _n( '%d existing comment was updated.', '%d existing comments were updated.', $comments_updated, $this->namespace ), $comments_updated ) );
+		
+		// Are we supposed to email the admin?
+		if( $this->get_option( 'email_report_to_admin' ) == 'yes' ) {
+			// Email the admin, let them know what just happened.
+			$subject = sprintf(
+				_n( '%s ran at %s and imported %d comment', '%s ran at %s and imported %d new comments', $comments_added ),
+				$this->friendly_name,
+				date("H:i:s"),
+				$comments_added
+			);
+			$this->email_admin( $subject , $this->process_log );
+		}
+		
 		/**
 		 * TODO: Create a logging function and update a log whenever this is run...
 		 */

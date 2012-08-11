@@ -13,15 +13,15 @@
         	<li>
 	            <label><?php _e( "Update frequency", $namespace ) ?>
 	            	<select name="data[update_schedule]">
-            		<?php foreach( (array) $this->update_schedules as $time => $description ): ?>
-	            		<option<?php echo ( $update_schedule == $time ) ? ' selected="selected"' : '' ; ?> value="<?php echo $time; ?>"><?php echo $description; ?></option>
+            		<?php foreach( (array) $this->update_schedules as $slug => $time_name ): ?>
+	            		<option<?php echo ( $update_schedule == $slug ) ? ' selected="selected"' : '' ; ?> value="<?php echo $slug; ?>"><?php echo $time_name['name']; ?></option>
         			<?php endforeach; ?>
 	            	</select>
             	</label>
         	</li>
         	<li>
         		<input<?php echo ( $this->get_option( 'email_report_to_admin' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="email_report_to_admin" type="checkbox" name="data[email_report_to_admin]" value="yes" />
-        		<label for="email_report_to_admin"><?php printf( __( 'Email a report to: %s when auto-updating comments?', $namespace ), get_option('admin_email') ); ?></label>
+        		<label for="email_report_to_admin"><?php printf( __( 'Email a report to: %s when auto-updating comments?', $namespace ), $this->admin_email_address ); ?></label>
         	</li>
         	<li>
         		<input<?php echo ( $this->get_option( 'update_existing_comment_content' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="update_existing_comment_content" type="checkbox" name="data[update_existing_comment_content]" value="yes" />
