@@ -1585,7 +1585,7 @@ class RelatedServiceComments {
 		
 		// Maybe schedule the new cron...
 		if( array_key_exists( $requested_schedule, $schedules ) ){
-			return wp_schedule_event( time() + $this->first_cron_offset, 'hourly', RELATED_SERVICE_COMMENTS_CRON_PREFIX );
+			return wp_schedule_event( time() + $this->first_cron_offset, $requested_schedule, RELATED_SERVICE_COMMENTS_CRON_PREFIX );
 		}
 		
 		return false;
