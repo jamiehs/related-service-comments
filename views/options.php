@@ -1,14 +1,9 @@
 <script type="text/javascript">var __namespace = '<?php echo $namespace; ?>';</script>
 <div class="wrap <?php echo $namespace; ?>">
     <h2><?php echo $page_title; ?></h2>
-    
-    <?php if( isset( $_GET['message'] ) ): ?>
-        <div id="message" class="updated below-h2"><p>Options successfully updated!</p></div>
-    <?php endif; ?>
-
     <form action="" method="post" id="<?php echo $namespace; ?>-form">
         <?php wp_nonce_field( $namespace . "-update-options" ); ?>
-        <h3><?php _e( "Change the settings of the plugin", $namespace ) ?></h3>
+        <h3><?php _e( "These settings control the scheduled import of comments and general options such as email alerts.", $namespace ) ?></h3>
         <ul>
         	<li>
 	            <label><?php _e( "Update frequency", $namespace ) ?>
@@ -18,6 +13,7 @@
         			<?php endforeach; ?>
 	            	</select>
             	</label>
+            	<span><?php echo $next_scheduled_cron_time; ?></span>
         	</li>
         	<li>
         		<input<?php echo ( $this->get_option( 'email_report_to_admin' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="email_report_to_admin" type="checkbox" name="data[email_report_to_admin]" value="yes" />
@@ -25,15 +21,25 @@
         	</li>
         	<li>
         		<input<?php echo ( $this->get_option( 'update_existing_comment_content' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="update_existing_comment_content" type="checkbox" name="data[update_existing_comment_content]" value="yes" />
-        		<label for="update_existing_comment_content"><?php _e( 'Update existing comment content? (comment text will be re-impored, but the ID and status (trash, approved, etc.) will stay the same)', $namespace ); ?></label>
+        		<label for="update_existing_comment_content"><?php _e( 'Update existing comment content? (comment text will be re-imported, but the ID and status (trash, approved, etc.) will stay the same)', $namespace ); ?></label>
         	</li>
         	<li>
 		        <input type="submit" name="submit" class="button-primary" value="<?php _e( "Save Changes", $namespace ) ?>" />
 		        <?php _e( "(Saves the above settings)", $namespace ) ?>
+		        <p><?php 
+		        	printf( __('Note that saving the options will reset the scheduled events and cause them to run %d seconds after you save, regardless of the schedule chosen.', $namespace), $this->first_cron_offset ); 
+        		?></p>
         	</li>
     	</ul>
     </form>
 
+	<h2><?php echo __( 'Manual Controls', $namespace ); ?></h2>
+    <p><?php 
+    	_e('The options below do not save the setting above. They simply run the task with the last saved settings, this is by design.', $namespace ); 
+	?></p>
+    <p><?php 
+    	_e('If you want to change the settings, do so above, save the options and then run the desired function below.', $namespace ); 
+	?></p>
     <form action="" method="post" id="<?php echo $namespace; ?>-update-comments-form">
         <?php wp_nonce_field( $namespace . "-update-comments-now" ); ?>
         <h3 class="update-now"><?php _e( "Force an update of your comments", $namespace ) ?></h3>
