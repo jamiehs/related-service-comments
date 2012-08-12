@@ -32,7 +32,8 @@ class RelatedServiceComments {
     var $namespace = "related_service_comments";
     var $version = "1.0.0";
 	var $process_log = '';
-	var $update_existing_comment_content = false;
+	var $update_existing_comment_content = false; // Should we update the comment data (for edits, etc)?
+	var $first_cron_offset = 60; // Number of seconds the scheduler waits before running the first event.
 	
     /**
      * Instantiation construction
@@ -54,7 +55,7 @@ class RelatedServiceComments {
 		
 		// Update frequencies
 	    $this->update_schedules = array(
-			false => array(
+			'never' => array(
 				'time' => 0, 
 				'name' => __('Never (Manual updates)', $this->namespace )
 			),
@@ -161,6 +162,9 @@ class RelatedServiceComments {
 		
 		// Filter the default array of cron schedules and add some more...
 		add_filter( 'cron_schedules', array( &$this, 'cron_add_custom_schedules' ) );
+		
+		// Add the cron task for updating the comments...
+		add_action( RELATED_SERVICE_COMMENTS_CRON_PREFIX, array( &$this, 'cron_import_comments' ) );
 	}
     
     /**
@@ -196,6 +200,9 @@ class RelatedServiceComments {
 
             // Update the options value with the data submitted
             update_option( $this->option_name, $data );
+			
+			// Setup the cron tasks
+			$this->schedule_cron();
             
             // Redirect back to the options page with the message flag to show the saved message
             wp_safe_redirect( $_REQUEST['_wp_http_referer'] );
@@ -290,9 +297,24 @@ class RelatedServiceComments {
             wp_die( 'You do not have sufficient permissions to access this page' );
         }
         
-        $page_title = $this->friendly_name;
         $namespace = $this->namespace;
+        $page_title = $this->friendly_name . ' ' . __( 'Settings', $namespace );
         $update_schedule = $this->get_option( 'update_schedule' );
+		$gmt_seconds_offset = get_option( 'gmt_offset' ) * 3600;
+		$next_scheduled_cron = wp_next_scheduled( RELATED_SERVICE_COMMENTS_CRON_PREFIX ) + $gmt_seconds_offset;
+		
+		// Create a bit of text for the next scheduled status
+		$next_scheduled_cron_time = ' (';
+		if( !empty( $next_scheduled_cron ) ){
+			$next_scheduled_cron_time .= sprintf(
+				__( 'next automatic update will be at: %s on %s', $namespace ),
+				date( "H:i:s", $next_scheduled_cron ),
+				date( "Y-m-d", $next_scheduled_cron )
+			);
+		}else{
+			$next_scheduled_cron_time .= __( 'there is no automatic updating scheduled', $namespace );
+		}
+		$next_scheduled_cron_time .= ')';
 		
         include( RELATED_SERVICE_COMMENTS_DIRNAME . "/views/options.php" );
     }
@@ -495,7 +517,7 @@ class RelatedServiceComments {
 	 */
 	function cron_add_custom_schedules( $schedules ) {
 		foreach( (array) $this->update_schedules as $slug => $time_name ){
-			if( $slug != false ) {
+			if( $slug != 'never' ) {
 				$schedules[ RELATED_SERVICE_COMMENTS_CRON_PREFIX . '_' . $slug ] = array(
 					'interval' => $time_name['time'],
 					'display' => $time_name['name']
@@ -503,6 +525,12 @@ class RelatedServiceComments {
 			}
 		}
 		return $schedules;
+	}
+	
+	function cron_import_comments() {
+    	$this->log_entry( __( "Updating the comments..." ) );
+    	$this->save_comments_for_services();
+    	$this->log_entry( __( "Done updating." ) );
 	}
 	
     /**
@@ -858,7 +886,11 @@ class RelatedServiceComments {
      * 
      * @return mixed Returns the option value or false(boolean) if the option is not found
      */
-    function get_option( $option_name ) {
+    function get_option( $option_name, $reload = false ) {
+    	// If reload is true, kill the existing options value so it gets fetched fresh.
+    	if( $reload )
+			$this->options = null;
+		
         // Load option values if they haven't been loaded already
         if( !isset( $this->options ) || empty( $this->options ) ) {
             $this->options = get_option( $this->option_name, $this->defaults );
@@ -997,6 +1029,46 @@ class RelatedServiceComments {
             $response_json = json_decode( $response['body'], true );
 			return $response_json;
         }
+		
+		return false;
+	}
+	
+	/**
+	 * Attempts to fetch the meta for an item's ID, 
+	 * armed with the service slug.
+	 * 
+	 * @param integer $id
+	 * @param string $service (slug)
+	 * 
+	 * @uses $this->get_video_meta_from_url()
+	 * @uses $this->youtube_url_from_id()
+	 * @uses $this->get_fivehundred_pixels_photo_meta()
+	 * @uses $this->get_dribbble_shot_meta()
+	 * 
+	 * @return mixed Returns false on failure, the passed in ID on soft failure and an <a> tag on success.
+	 */
+	function get_permalink_from_id_and_service( $id, $service ) {
+		switch( $service ) {
+			case 'youtube':
+				$meta = $this->get_video_meta_from_url( $this->youtube_url_from_id( $id ) );
+			break;
+			case 'fivehundred_pixels':
+				$meta = $this->get_fivehundred_pixels_photo_meta( $id );
+			break;
+			case 'dribbble':
+				$meta = $this->get_dribbble_shot_meta( $id );
+			break;
+			default:
+				return $id;
+		}
+		
+		if( isset( $meta ) && !empty( $meta ) ) {
+			return sprintf(
+				'<a href="%s" target="_blank">%s</a>',
+				$meta['permalink'],
+				$meta['title']
+			);
+		}
 		
 		return false;
 	}
@@ -1486,16 +1558,39 @@ class RelatedServiceComments {
         }
     }
     
-    /**
-     * Register scripts used by this plugin for enqueuing elsewhere
-     * 
-     * @uses wp_register_script()
-     */
-    function wp_register_scripts() {
-        // Admin JavaScript
-        wp_register_script( "{$this->namespace}-admin", RELATED_SERVICE_COMMENTS_URLPATH . "/js/admin.js", array( 'jquery' ), $this->version, true );
-    }
-    
+	/**
+	 * Schedule Cron
+	 * 
+	 * Unschedules the cron and then attempts 
+	 * to add a new cron if one was requested.
+	 * 
+	 * @uses RELATED_SERVICE_COMMENTS_CRON_PREFIX
+	 * @uses wp_get_schedules()
+	 * @uses wp_clear_scheduled_hook()
+	 * @uses wp_schedule_event()
+	 * @uses current_time()
+	 * @uses $this->get_option()
+	 * 
+	 * @return mixed Returns null on success, and false on failure
+	 */
+	function schedule_cron() {
+		// Grab the wordpress schedules available.
+		$schedules = wp_get_schedules();
+		
+		// Grab the schedule requested by the user.
+		$requested_schedule = RELATED_SERVICE_COMMENTS_CRON_PREFIX . '_' . $this->get_option( 'update_schedule', true );
+		
+		// Unset any existing cron at this time...
+		wp_clear_scheduled_hook( RELATED_SERVICE_COMMENTS_CRON_PREFIX );
+		
+		// Maybe schedule the new cron...
+		if( array_key_exists( $requested_schedule, $schedules ) ){
+			return wp_schedule_event( time() + $this->first_cron_offset, 'hourly', RELATED_SERVICE_COMMENTS_CRON_PREFIX );
+		}
+		
+		return false;
+	}
+	
 	/**
 	 * Save Comments For Services
 	 * 
@@ -1531,7 +1626,19 @@ class RelatedServiceComments {
 					
 					// Log number of comments for this post and the service...
 					$count_comments = count( $comments );
-					$this->log_entry( sprintf( _n( 'Found %d comment for post: %s and item: %s from %s', 'Found %d comments for post: %s and item: %s from %s', $count_comments ), $count_comments, '<em>' . get_the_title( $post_id ) . '</em>', $content_id, $service ) );
+					$this->log_entry(
+						sprintf(
+							_n(
+								'Found %d comment for post: %s and item: %s from %s',
+								'Found %d comments for post: %s and item: %s from %s',
+								$count_comments
+							),
+							$count_comments,
+							'<em><a href="' . get_permalink( $post_id ) . '" target="_blank">' . get_the_title( $post_id ) . '</a></em>',
+							$this->get_permalink_from_id_and_service( $content_id, $service ),
+							$service
+						)
+					);
 					
 					/**
 					 * Loop through each comment and simply insert them... no hierarchy.
@@ -1756,6 +1863,16 @@ class RelatedServiceComments {
 		 
 	}
 	
+    /**
+     * Register scripts used by this plugin for enqueuing elsewhere
+     * 
+     * @uses wp_register_script()
+     */
+    function wp_register_scripts() {
+        // Admin JavaScript
+        wp_register_script( "{$this->namespace}-admin", RELATED_SERVICE_COMMENTS_URLPATH . "/js/admin.js", array( 'jquery' ), $this->version, true );
+    }
+    
     /**
      * Register styles used by this plugin for enqueuing elsewhere
      * 
