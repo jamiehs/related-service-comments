@@ -32,6 +32,7 @@ class RelatedServiceComments {
     var $namespace = "related_service_comments";
     var $version = "1.0.0";
 	var $process_log = '';
+	var $other_logs = array();
 	var $update_existing_comment_content = false; // Should we update the comment data (for edits, etc)?
 	var $first_cron_offset = 60; // Number of seconds the scheduler waits before running the first event.
 	
@@ -98,6 +99,7 @@ class RelatedServiceComments {
 		// Set and Translate defaults
 	    $this->defaults = array(
 			'email_report_to_admin' => 'no',
+			'email_type' => 'summary',
 			'update_existing_comment_content' => 'yes',
 			'youtube_comment_prefix' => __('From YouTube: ', $this->namespace ),
 			'fivehundred_pixels_comment_prefix' => __('From 500px: ', $this->namespace ),
@@ -300,6 +302,7 @@ class RelatedServiceComments {
         $namespace = $this->namespace;
         $page_title = $this->friendly_name . ' ' . __( 'Settings', $namespace );
         $update_schedule = $this->get_option( 'update_schedule' );
+        $email_type = $this->get_option( 'email_type' );
 		$gmt_seconds_offset = get_option( 'gmt_offset' ) * 3600;
 		$next_scheduled_cron = wp_next_scheduled( RELATED_SERVICE_COMMENTS_CRON_PREFIX ) + $gmt_seconds_offset;
 		
@@ -478,7 +481,13 @@ class RelatedServiceComments {
 		  
 		 
 		 // Log a summary of the cleanup actions.
-		 $this->log_entry( sprintf( _n( '%d thing was cleaned up...', '%d things were cleaned up...', $cleaned_rows, $this->namespace ), $cleaned_rows ) );
+		 if( $cleaned_rows > 0 ) {
+		 	// If something was indeed cleaned...
+		 	$this->log_entry( sprintf( _n( '%d thing was cleaned up...', '%d things were cleaned up...', $cleaned_rows, $this->namespace ), $cleaned_rows ), array( 'summary' ) );
+		 } else{
+		 	// If nothing needed to be cleaned
+		 	$this->log_entry( __( 'Nothing needed to be cleaned up...', $this->namespace ), array( 'summary' ) );
+		 }
 	}
 
 	/**
@@ -1352,8 +1361,34 @@ class RelatedServiceComments {
         if( !isset( $RelatedServiceComments ) ) $RelatedServiceComments = new RelatedServiceComments();
     }
 	
-	function log_entry( $log_message ) {
+	/**
+	 * Log Entry
+	 * 
+	 * Logs the message passed in and appends it to
+	 * a class property (as HTML) for later output or storage.
+	 * 
+	 * @param string $log_message
+	 * @param array $other_logs An array of slugs
+	 * 
+	 * @return void
+	 */
+	function log_entry( $log_message, $other_logs = array() ) {
 		$this->process_log .= "<p>{$log_message}</p>";
+		
+		// Loop through eash log slug that was sent into the function.
+		foreach( (array) $other_logs as $slug ){
+			/**
+			 * It's a bit silly that PHP throws a warning for this.
+			 * Essentially, we get a notice if we try to append a string
+			 * to an unset variable. So if it's already set, we append,
+			 * else we set it.
+			 */
+			if( isset( $this->other_logs[$slug] ) ){
+				$this->other_logs[$slug] .= "<p>{$log_message}</p>";
+			} else {
+				$this->other_logs[$slug] = "<p>{$log_message}</p>";
+			}
+		}
 	}
 	
 	/**
@@ -1842,11 +1877,20 @@ class RelatedServiceComments {
 		}
 
 		// Log the insertion of the comments...
-		$this->log_entry( sprintf( _n( '%d new comment was added.', '%d new comments were added.', $comments_added, $this->namespace ), $comments_added ) );
-		$this->log_entry( sprintf( _n( '%d existing comment was updated.', '%d existing comments were updated.', $comments_updated, $this->namespace ), $comments_updated ) );
+		$this->log_entry( sprintf( _n( '%d new comment was added.', '%d new comments were added.', $comments_added, $this->namespace ), $comments_added ), array( 'summary' ) );
+		$this->log_entry( sprintf( _n( '%d existing comment was updated.', '%d existing comments were updated.', $comments_updated, $this->namespace ), $comments_updated ), array( 'summary' ) );
 		
 		// Are we supposed to email the admin?
 		if( $this->get_option( 'email_report_to_admin' ) == 'yes' ) {
+			
+			if( $this->get_option( 'email_type' ) == 'summary' ) {
+				// Use the summary key only.
+				$log = $this->other_logs['summary'];
+			} else {
+				// Use the full log
+				$log = $this->process_log;
+			}
+			
 			// Email the admin, let them know what just happened.
 			$subject = sprintf(
 				_n( '%s ran at %s and imported %d comment', '%s ran at %s and imported %d new comments', $comments_added ),
@@ -1854,7 +1898,7 @@ class RelatedServiceComments {
 				date("H:i:s"),
 				$comments_added
 			);
-			$this->email_admin( $subject , $this->process_log );
+			$this->email_admin( $subject , $log );
 		}
 		
 		/**

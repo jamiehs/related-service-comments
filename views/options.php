@@ -20,6 +20,13 @@
         		<label for="email_report_to_admin"><?php printf( __( 'Email a report to: %s when auto-updating comments?', $namespace ), $this->admin_email_address ); ?></label>
         	</li>
         	<li>
+        		<label for="email_type"><?php _e( 'Email type', $namespace ); ?></label>
+        		<select id="email_type" name="data[email_type]">
+        			<option<?php echo ( $email_type == 'summary' ) ? ' selected="selected"' : '' ; ?> value="summary"><?php _e( 'Short Summary', $namespace ); ?></option>
+        			<option<?php echo ( $email_type == 'full_log' ) ? ' selected="selected"' : '' ; ?> value="full_log"><?php _e( 'Detailed Log', $namespace ); ?></option>
+        		</select>
+        	</li>
+        	<li>
         		<input<?php echo ( $this->get_option( 'update_existing_comment_content' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="update_existing_comment_content" type="checkbox" name="data[update_existing_comment_content]" value="yes" />
         		<label for="update_existing_comment_content"><?php _e( 'Update existing comment content? (comment text will be re-imported, but the ID and status (trash, approved, etc.) will stay the same)', $namespace ); ?></label>
         	</li>
