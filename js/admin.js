@@ -16,7 +16,7 @@
 			saving: $('#related_service_comments_actions .saving.message')
 		};
 		
-		var youTubeRegex = /(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|[a-zA-Z0-9_\-]+\?v=)([^#\&\?\n<>]*)/gi;
+		var youTubeRegex = /(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|[a-zA-Z0-9_\-]+\?v=)([^#\&\?\n<>\'\"]*)/gi;
 		var youTubeMatches = [];
 		
 		var fivehundredPixelsRegex = /(\/photo\/|pcdn.500px.net\/)([0-9]+)/gi;
