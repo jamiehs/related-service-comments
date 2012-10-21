@@ -30,15 +30,29 @@
         		<input<?php echo ( $this->get_option( 'update_existing_comment_content' ) == 'yes' ) ? ' checked="checked"' : '' ; ?> id="update_existing_comment_content" type="checkbox" name="data[update_existing_comment_content]" value="yes" />
         		<label for="update_existing_comment_content"><?php _e( 'Update existing comment content? (comment text will be re-imported, but the ID and status (trash, approved, etc.) will stay the same)', $namespace ); ?></label>
         	</li>
-        	<li>
-		        <input type="submit" name="submit" class="button-primary" value="<?php _e( "Save Changes", $namespace ) ?>" />
-		        <?php _e( "(Saves the above settings)", $namespace ) ?>
-		        <p><?php 
-		        	printf( __('Note that saving the options will reset the scheduled events and cause them to run %d seconds after you save, regardless of the schedule chosen.', $namespace), $this->first_cron_offset ); 
-        		?></p>
-        	</li>
     	</ul>
+    	
+        <h3><?php echo __( 'YouTube Settings', $namespace ); ?></h3>
+        <ul>
+            <li>
+                <h4><?php echo __( 'Attribute the YouTube Commments to this blog\'s authors', $namespace ); ?></h4>
+                <p><?php 
+                    printf( __('One user per line, enter the username on this blog, then a comma, and the YouTube Username. eg: %s', $namespace), "<strong>jamie, FunnyPants65</strong>" ); 
+                ?></p>
+                <textarea cols="80" rows="4" name="data[youtube_username_map]"><?php echo $this->get_option( 'youtube_username_map' ); ?></textarea>
+            </li>
+        </ul>
+        
+        <div class="submit-row">
+            <input type="submit" name="submit" class="button-primary" value="<?php _e( "Save Changes", $namespace ) ?>" />
+            <?php _e( "(Saves the above settings)", $namespace ) ?>
+            <p><?php 
+                printf( __('Note that saving the options will reset the scheduled events and cause them to run %d seconds after you save, regardless of the schedule chosen.', $namespace), $this->first_cron_offset ); 
+            ?></p>
+        </div>
+        
     </form>
+    
 
 	<h2><?php echo __( 'Manual Controls', $namespace ); ?></h2>
     <p><?php 
