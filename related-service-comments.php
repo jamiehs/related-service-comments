@@ -1786,7 +1786,7 @@ class RelatedServiceComments {
                             'user_id' => 0,
                             'comment_author_IP' => '127.0.0.1',
                             'comment_agent' => "Created by {$this->namespace} for {$service}",
-                            'comment_date' => $comment['created'],
+                            'comment_date' => date( "Y-m-d H:i:s", strtotime( $comment['created'] ) ),
                             'comment_approved' => $comment_approved,
                         );
                         
