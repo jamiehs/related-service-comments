@@ -1144,7 +1144,7 @@ class RelatedServiceComments {
                 FROM $wpdb->postmeta as m
                 LEFT JOIN $wpdb->posts as p ON m.post_id = p.ID
                 WHERE m.meta_key = %s
-                AND p.post_status IN('draft','publish')
+                AND p.post_status IN('future','publish')
             ";
             $results = $wpdb->get_results( $wpdb->prepare( $sql, $meta_key ) );
             
